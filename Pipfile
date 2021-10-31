@@ -11,6 +11,7 @@ sounddevice = "*"
 scipy = "*"
 pillow = "*"
 pynput = "*"
+pycryptodome = "*"
 
 [dev-packages]
 
